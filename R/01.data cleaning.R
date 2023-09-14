@@ -32,33 +32,25 @@ pros <-
 
 ############################################################# Clean data
 clinical <- clinical %>% 
-  # left_join(., discharge %>% 
-  #             mutate(mrn = as.character(mrn)),
-  #           by = "mrn") %>% 
-  # left_join(., discharge2 %>% 
-  #             mutate(mrn = as.character(mrn)),
-  #           by = "mrn") %>% 
   mutate_at(c("initial_discharge_date",
               "date_of_car_t_infusion_number_of_days_from_apharesis_to_infusion"), 
             ~ as.Date(., format = "%m/%d/%y")) %>% 
   mutate(hospitalstay = initial_discharge_date - 
            date_of_car_t_infusion_number_of_days_from_apharesis_to_infusion) %>% 
-  # mutate(baseline_ferritin = case_when(
-  #   baseline_ferritin >= 400                                    ~ "≥ ULN at LD",
-  #   baseline_ferritin < 400                                    ~ "Normal"
-  # )) %>% 
+  
+  
+  
   mutate(peak_ferritin = case_when(
-    max_ferritin >= 400                                    ~ "≥ ULN at LD",
-    max_ferritin < 400                                    ~ "Normal"
+    max_ferritin >= 400                              ~ "≥ ULN at LD",
+    max_ferritin < 400                               ~ "Normal"
   )) %>% 
-  # mutate(baseline_crp = case_when(
-  #   baseline_crp >= 0.5                                    ~ "≥ ULN at LD",
-  #   baseline_crp < 0.5                                    ~ "Normal"
-  # )) %>% 
   mutate(peak_crp = case_when(
-    max_crp >= 0.5                                    ~ "≥ ULN at LD",
+    max_crp >= 0.5                                   ~ "≥ ULN at LD",
     max_crp < 0.5                                    ~ "Normal"
-  ))
+  )) %>% 
+  mutate_at(c("peak_ferritin", "peak_crp"), 
+            ~ factor(., levels = c("Normal", 
+                                   "≥ ULN at LD")))
 
 pros <- pros %>% 
   mutate(mrn = as.character(mrn)) %>% 
@@ -110,70 +102,86 @@ pros <- pros %>%
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat2")) %>% 
   mutate(across(contains("ti_"), ~ case_when(
-    . < 3                                               ~ "< 3",
-    . >= 3                                              ~ "≥ 3",
+    . < 2                                               ~ "None-Mild",
+    . >= 2                                              ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat3")) %>% 
   mutate(across(contains("depression_tscore"), ~ case_when(
     . < 55                                              ~ "Normal",
-    . <= 59                                             ~ "Mild",
-    . <= 69                                             ~ "Moderate",
-    . >= 70                                             ~ "Severe",
+    . >= 55 &
+      . < 60                                            ~ "Mild",
+    . >= 60                                             ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
-  mutate(promis_depression_tscore_baseline_cat = 
-           factor(promis_depression_tscore_baseline_cat, 
-                  levels = c("Normal", "Mild",
-                             "Moderate"))
-  ) %>% 
+  # mutate(promis_depression_tscore_baseline_cat = 
+  #          factor(promis_depression_tscore_baseline_cat, 
+  #                 levels = c("Normal", "Mild",
+  #                            "Moderate"))
+  # ) %>% 
+  mutate(across(contains("depression_tscore"), ~ case_when(
+    . < 60                                              ~ "None-Mild",
+    . >= 60                                             ~ "Moderate-Severe",
+    TRUE                                                ~ NA_character_)
+    , .names = "{.col}_cat2")) %>%
+  mutate(across(contains("depression_tscore"), ~ case_when(
+    . < 55                                              ~ "None",
+    . >= 55                                             ~ "Mild-Severe",
+    TRUE                                                ~ NA_character_)
+    , .names = "{.col}_cat3")) %>%
   mutate(across(contains("anxiety_tscore"), ~ case_when(
     . < 55                                              ~ "Normal",
-    . <= 59                                             ~ "Mild",
-    . <= 69                                             ~ "Moderate",
-    . >= 70                                             ~ "Severe",
+    . >= 55 &
+      . < 60                                            ~ "Mild",
+    . >= 60                                             ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
-  mutate(promis_anxiety_tscore_baseline_cat = 
-           factor(promis_anxiety_tscore_baseline_cat, 
-                  levels = c("Normal", "Mild",
-                             "Moderate"))
-  ) %>% 
+  # mutate(promis_anxiety_tscore_baseline_cat = 
+  #          factor(promis_anxiety_tscore_baseline_cat, 
+  #                 levels = c("Normal", "Mild",
+  #                            "Moderate"))
+  # ) %>% 
+  mutate(across(contains("anxiety_tscore"), ~ case_when(
+    . < 60                                              ~ "None-Mild",
+    . >= 60                                             ~ "Moderate-Severe",
+    TRUE                                                ~ NA_character_)
+    , .names = "{.col}_cat2")) %>%
+  mutate(across(contains("anxiety_tscore"), ~ case_when(
+    . < 55                                              ~ "None",
+    . >= 55                                             ~ "Mild-Severe",
+    TRUE                                                ~ NA_character_)
+    , .names = "{.col}_cat3")) %>%
   mutate(across(contains("fatigue_tscore"), ~ case_when(
     . < 55                                              ~ "Normal",
-    . <= 59                                   ~ "Mild",
-    . <= 69   ~ "Moderate",
-    . >= 70   ~ "Severe",
+    . >= 55 &
+      . < 60                                            ~ "Mild",
+    . >= 60                                             ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
   mutate(across(contains("fatigue_tscore"), ~ case_when(
-    . < 55                                              ~ "Normal",
-    . <= 59                                   ~ "Mild",
-    . > 59   ~ "Moderate-Severe",
-    # . >= 70   ~ "Severe",
+    . < 60                                              ~ "None-Mild",
+    . >= 60                                             ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat2")) %>%
   mutate(across(contains("fatigue_tscore"), ~ case_when(
-    . < 60                                    ~ "< 60",
-    . >= 60                                   ~ "≥ 60",
+    . < 55                                              ~ "None",
+    . >= 55                                             ~ "Mild-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat3")) %>%
   mutate(across(contains("pain_tscore"), ~ case_when(
     . < 55                                              ~ "Normal",
-    . <= 59                                   ~ "Mild",
-    . <= 69   ~ "Moderate",
-    . >= 70   ~ "Severe",
+    . >= 55 &
+      . < 60                                            ~ "Mild",
+    . >= 60                                             ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
   mutate(across(contains("pain_tscore"), ~ case_when(
-    . < 55                                              ~ "Normal",
-    . <= 59                                   ~ "Mild",
-    . > 59   ~ "Moderate-Severe",
-    # . >= 70   ~ "Severe",
+    . < 60                                              ~ "None-Mild",
+    . >= 60                                             ~ "Moderate-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat2")) %>%
   mutate(across(contains("pain_tscore"), ~ case_when(
-    . < 39                                              ~ "< 39",
-    . >= 39                                             ~ "≥ 39",
+    . < 55                                              ~ "None",
+    . >= 55                                             ~ "Mild-Severe",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat3")) %>%
   mutate(across(contains("sleep_tscore"), ~ case_when(
@@ -184,36 +192,48 @@ pros <- pros %>%
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
   mutate(across(contains("physical_tscore"), ~ case_when(
-    . < 30                                              ~ "Severe",
-    . <= 39                                   ~ "Moderate",
-    . <= 44   ~ "Mild",
-    . >= 45   ~ "Normal",
+    # . <= 30                                             ~ "Severe",
+    # . > 30 &
+    . <= 40                                             ~ "Moderate-Severe",
+    . > 40 & 
+      . <= 45                                           ~ "Mild",
+    . > 45                                              ~ "Normal",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
   mutate(across(contains("physical_tscore"), ~ case_when(
-    # . < 30                                              ~ "Severe",
-    . <= 39                                             ~ "Moderate-Severe",
-    . <= 44                                             ~ "Mild",
-    . >= 45                                             ~ "Normal",
+    . <= 40                                             ~ "Moderate-Severe",
+    . > 40                                              ~ "None-Mild",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat2")) %>%
   mutate(across(contains("physical_tscore"), ~ case_when(
-    . < 39                                              ~ "< 39",
-    . >= 39                                             ~ "≥ 39",
+    . <= 45                                             ~ "Mild-Severe",
+    . > 45                                              ~ "None",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat3")) %>%
   mutate(across(contains("social_tscore"), ~ case_when(
-    . < 30                                              ~ "Severe",
-    . <= 39                                   ~ "Moderate",
-    . <= 44   ~ "Mild",
-    . >= 45   ~ "Normal",
+    # . <= 30                                             ~ "Severe",
+    # . > 30 &
+    . <= 40                                             ~ "Moderate-Severe",
+    . > 40 & 
+      . <= 45                                           ~ "Mild",
+    . > 45                                              ~ "Normal",
     TRUE                                                ~ NA_character_)
     , .names = "{.col}_cat")) %>%
-  mutate(promis_social_tscore_baseline_cat = 
-           factor(promis_social_tscore_baseline_cat, 
-                  levels = c("Normal", "Mild",
-                             "Moderate", "Severe"))
-  ) %>% 
+  # mutate(promis_social_tscore_baseline_cat = 
+  #          factor(promis_social_tscore_baseline_cat, 
+  #                 levels = c("Normal", "Mild",
+  #                            "Moderate", "Severe"))
+  # ) %>% 
+  mutate(across(contains("social_tscore"), ~ case_when(
+    . <= 40                                             ~ "Moderate-Severe",
+    . > 40                                              ~ "None-Mild",
+    TRUE                                                ~ NA_character_)
+    , .names = "{.col}_cat2")) %>%
+  mutate(across(contains("social_tscore"), ~ case_when(
+    . <= 45                                             ~ "Mild-Severe",
+    . > 45                                              ~ "None",
+    TRUE                                                ~ NA_character_)
+    , .names = "{.col}_cat3")) %>%
   mutate(across(contains("cognitive_tscore"), ~ case_when(
     . < 30                                              ~ "Severe",
     . <= 39                                   ~ "Moderate",
@@ -227,7 +247,23 @@ pros <- pros %>%
     . <= 7   ~ "Moderate",
     . >= 8   ~ "Severe",
     TRUE                                                ~ NA_character_)
-    , .names = "{.col}_cat")) 
+    , .names = "{.col}_cat")) %>% 
+  
+  mutate_at(c("promis_anxiety_tscore_baseline_cat",
+              "promis_depression_tscore_baseline_cat",
+              "promis_social_tscore_baseline_cat"), 
+            ~ factor(., levels = c("Normal", "Mild", "Moderate-Severe"))
+  ) %>% 
+  mutate_at(c("promis_anxiety_tscore_baseline_cat3",
+              "promis_depression_tscore_baseline_cat3",
+              "promis_social_tscore_baseline_cat3"), 
+            ~ relevel(factor(.), ref = "None")
+  ) %>% 
+  mutate_at(c("promis_anxiety_tscore_baseline_cat2",
+              "promis_depression_tscore_baseline_cat2",
+              "promis_social_tscore_baseline_cat2"), 
+            ~ relevel(factor(.), ref = "None-Mild")
+  )
 
 
 cytokines <- cytokines %>% 
