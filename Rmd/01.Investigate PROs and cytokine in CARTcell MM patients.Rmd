@@ -1,0 +1,671 @@
+---
+title: "Investigate PROs and cytokine levels in CARTcell MM patients"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+
+.figure {
+    margin-top: 100px;
+    margin-bottom: 100px;
+}
+
+table {
+    margin-top: 10px;
+    margin-bottom: 25px !important;
+}
+
+th, td { padding: 5px; }
+
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library}
+library(tidyverse)
+library(gtsummary)
+library(labelled)
+library(survminer)
+library(survival)
+theme_set(theme_classic(base_size = 18))
+theme_gtsummary_compact()
+```
+
+```{r load data}
+pros_cytokines_data <- 
+  read_rds(paste0(here::here(), "/pros_cytokines_data.rds"))
+
+pros_data <- pros_cytokines_data %>% 
+  filter(data_has_pros == "Yes")
+cyto_data <- pros_cytokines_data %>% 
+  filter(data_has_cytokines == "Yes")
+```
+
+# Total PROs dataset (n = `r nrow(pros_data)`)
+What are the unknowns?
+```{r}
+pros_data %>% 
+    select(gr2_CRS, gr2_ICANS,
+           promis_anxiety_tscore_baseline,
+           promis_depression_tscore_baseline,
+           promis_social_tscore_baseline) %>%
+    tbl_summary() %>%
+    bold_labels()
+```
+
+## Categories
+### Toxicities and responses
+```{r, results = 'asis'}
+table_var <- c("gr2_CRS", "CRS_any",
+               "gr2_ICANS", "ICANS_any",
+         # "day30response_v2", 
+         "ORR_30days", "CRorbetter_30days",
+         # "mon3response_v2", 
+         "ORR_3mon", "CRorbetter_3mon",
+         "best_ORR", "best_CRorbetter"
+)
+
+for (i in table_var){
+  
+  tbl <- pros_data %>% 
+    select(i, 
+           promis_anxiety_tscore_baseline,
+           promis_depression_tscore_baseline,
+           promis_social_tscore_baseline) %>%
+    tbl_summary(by = i) %>%
+    bold_labels() %>%
+    add_p() %>% bold_p(t= 0.05) %>%
+    modify_spanning_header(everything() ~ paste(i))
+  print(tbl)
+  
+}
+```
+
+### day 90 PROs
+```{r, results = 'asis'}
+table_var <- c("factg_total_90_cat", 
+         # "ti_90_cat", "ti_90_cat2", 
+         "ti_90_cat3",
+         "promis_fatigue_tscore_90_cat",
+         "promis_fatigue_tscore_90_cat2",
+         "promis_fatigue_tscore_90_cat3",
+         "promis_pain_tscore_90_cat",
+         "promis_pain_tscore_90_cat2",
+         "promis_pain_tscore_90_cat3",
+         "promis_physical_tscore_90_cat",
+         "promis_physical_tscore_90_cat2",
+         "promis_physical_tscore_90_cat3"
+)
+
+for (i in table_var){
+  
+  tbl <- pros_data %>% 
+    select(i, 
+           promis_anxiety_tscore_baseline,
+           promis_depression_tscore_baseline,
+           promis_social_tscore_baseline) %>%
+    tbl_summary(by = i) %>%
+    bold_labels() %>%
+    add_p() %>% bold_p(t= 0.05) %>%
+    modify_spanning_header(everything() ~ paste(i))
+  print(tbl)
+  
+}
+```
+
+## Continuous
+### Anxiety
+```{r}
+summary(lm(factg_total_90 ~ promis_anxiety_tscore_baseline, data = pros_data))
+
+summary(lm(ti_90 ~ promis_anxiety_tscore_baseline, data = pros_data))
+
+summary(lm(promis_fatigue_tscore_90 ~ promis_anxiety_tscore_baseline, data = pros_data))
+
+summary(lm(promis_pain_tscore_90 ~ promis_anxiety_tscore_baseline, data = pros_data))
+
+summary(lm(promis_physical_tscore_90 ~ promis_anxiety_tscore_baseline, data = pros_data))
+```
+
+### Depression 
+```{r}
+summary(lm(factg_total_90 ~ promis_depression_tscore_baseline, data = pros_data))
+
+summary(lm(ti_90 ~ promis_depression_tscore_baseline, data = pros_data))
+
+summary(lm(promis_fatigue_tscore_90 ~ promis_depression_tscore_baseline, data = pros_data))
+
+summary(lm(promis_pain_tscore_90 ~ promis_depression_tscore_baseline, data = pros_data))
+
+summary(lm(promis_physical_tscore_90 ~ promis_depression_tscore_baseline, data = pros_data))
+```
+
+### Social 
+```{r}
+summary(lm(factg_total_90 ~ promis_social_tscore_baseline, data = pros_data))
+
+summary(lm(ti_90 ~ promis_social_tscore_baseline, data = pros_data))
+
+summary(lm(promis_fatigue_tscore_90 ~ promis_social_tscore_baseline, data = pros_data))
+
+summary(lm(promis_pain_tscore_90 ~ promis_social_tscore_baseline, data = pros_data))
+
+summary(lm(promis_physical_tscore_90 ~ promis_social_tscore_baseline, data = pros_data))
+```
+
+## Survival
+### 1.HR OS
+```{r}
+tbl_uni <- pros_data %>% 
+  select(os_event, mo_os_from_infusion,
+         promis_anxiety_tscore_baseline,
+         promis_depression_tscore_baseline,
+         promis_social_tscore_baseline,
+         promis_anxiety_tscore_baseline_cat,
+         promis_anxiety_tscore_baseline_cat2,
+         promis_anxiety_tscore_baseline_cat3,
+         promis_depression_tscore_baseline_cat,
+         promis_depression_tscore_baseline_cat2,
+         promis_depression_tscore_baseline_cat3,
+         promis_social_tscore_baseline_cat,
+         promis_social_tscore_baseline_cat2,
+         promis_social_tscore_baseline_cat3
+         ) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = pros_data$mo_os_from_infusion,
+                             event = pros_data$os_event)),
+                   exponentiate = TRUE) %>%
+  bold_labels() %>% italicize_levels() %>%
+  bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level")
+tbl_uni
+```
+
+### 1.HR PFS
+```{r}
+tbl_uni <- pros_data %>% 
+  select(pfs_event, mo_pfs_from_infusion,
+         promis_anxiety_tscore_baseline,
+         promis_depression_tscore_baseline,
+         promis_social_tscore_baseline,
+         promis_anxiety_tscore_baseline_cat,
+         promis_anxiety_tscore_baseline_cat2,
+         promis_anxiety_tscore_baseline_cat3,
+         promis_depression_tscore_baseline_cat,
+         promis_depression_tscore_baseline_cat2,
+         promis_depression_tscore_baseline_cat3,
+         promis_social_tscore_baseline_cat,
+         promis_social_tscore_baseline_cat2,
+         promis_social_tscore_baseline_cat3
+         ) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = pros_data$mo_pfs_from_infusion,
+                             event = pros_data$pfs_event)),
+                   exponentiate = TRUE) %>%
+  bold_labels() %>% italicize_levels() %>%
+  bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level")
+tbl_uni
+```
+
+# Total Cytokine dataset (n = `r nrow(cyto_data)`)
+What are the unknowns?
+```{r}
+cyto_data %>% 
+  tbl_cross(row = baseline_ferritin_cat, col = data_has_cytokines)
+pros_cytokines_data %>% 
+  tbl_cross(row = baseline_ferritin_cat, col = data_has_cytokines)
+pros_cytokines_data %>% 
+    select(gr2_CRS, gr2_ICANS, 
+           baseline_ferritin_cat, baseline_ferritin,
+           peak_ferritin,
+           baseline_crp_cat, baseline_crp,
+           peak_crp,
+           IL2_baseline, peak_il2,
+           IL6_baseline, peak_il6,
+           IFNg_baseline, peak_ifng,
+           TNFa_baseline, peak_tnfa) %>%
+    tbl_summary() %>%
+    bold_labels()
+```
+
+## Categories
+### toxicities and responses
+```{r, results = 'asis'}
+table_var <- c("gr2_CRS", "CRS_any",
+               "gr2_ICANS", "ICANS_any",
+         # "day30response_v2", 
+         "ORR_30days", "CRorbetter_30days",
+         # "mon3response_v2", 
+         "ORR_3mon", "CRorbetter_3mon",
+         "best_ORR", "best_CRorbetter"
+)
+
+for (i in table_var){
+  
+  tbl <- pros_cytokines_data %>% 
+    select(i, 
+           baseline_ferritin_cat, baseline_ferritin,
+           peak_ferritin,
+           baseline_crp_cat, baseline_crp,
+           peak_crp,
+           IL2_baseline, peak_il2,
+           IL6_baseline, peak_il6,
+           IFNg_baseline, peak_ifng,
+           TNFa_baseline, peak_tnfa) %>%
+    tbl_summary(by = i) %>%
+    bold_labels() %>%
+    add_p() %>% bold_p(t= 0.05) %>%
+    modify_spanning_header(everything() ~ paste(i))
+  print(tbl)
+  
+}
+```
+
+### day 90 PROs
+```{r, results = 'asis'}
+table_var <- c("factg_total_90_cat", 
+         # "ti_90_cat", "ti_90_cat2", 
+         "ti_90_cat3",
+         "promis_fatigue_tscore_90_cat",
+         "promis_fatigue_tscore_90_cat2",
+         "promis_fatigue_tscore_90_cat3",
+         "promis_pain_tscore_90_cat",
+         "promis_pain_tscore_90_cat2",
+         "promis_pain_tscore_90_cat3",
+         "promis_physical_tscore_90_cat",
+         "promis_physical_tscore_90_cat2",
+         "promis_physical_tscore_90_cat3"
+)
+
+for (i in table_var){
+  
+  tbl <- pros_cytokines_data %>% 
+    select(i, 
+           baseline_ferritin_cat, baseline_ferritin,
+           peak_ferritin,
+           baseline_crp_cat, baseline_crp,
+           peak_crp,
+           IL2_baseline, peak_il2,
+           IL6_baseline, peak_il6,
+           IFNg_baseline, peak_ifng,
+           TNFa_baseline, peak_tnfa) %>%
+    tbl_summary(by = i) %>%
+    bold_labels() %>%
+    add_p() %>% bold_p(t= 0.05) %>%
+    modify_spanning_header(everything() ~ paste(i))
+  print(tbl)
+  
+}
+```
+
+## Continuous
+
+### factg_total_90
+```{r}
+summary(lm(factg_total_90 ~ baseline_ferritin, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ baseline_ferritin_cat, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ max_ferritin, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ peak_ferritin, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ baseline_crp, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ baseline_crp_cat, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ max_crp, data = pros_cytokines_data))
+print("zero normal peak_crp with pros data")
+# summary(lm(factg_total_90 ~ peak_crp, data = pros_cytokines_data))
+# pros_cytokines_data %>% 
+#   select(factg_total_90, baseline_ferritin) %>% 
+#   tbl_uvregression(method = lm,
+#                    y = factg_total_90)
+summary(lm(factg_total_90 ~ IL2_baseline, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ peak_il2, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ IL6_baseline, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ peak_il6, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ IFNg_baseline, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ peak_ifng, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ TNFa_baseline, data = pros_cytokines_data))
+summary(lm(factg_total_90 ~ peak_tnfa, data = pros_cytokines_data))
+```
+
+### ti_90
+```{r}
+summary(lm(ti_90 ~ baseline_ferritin, data = pros_cytokines_data))
+summary(lm(ti_90 ~ baseline_ferritin_cat, data = pros_cytokines_data))
+summary(lm(ti_90 ~ max_ferritin, data = pros_cytokines_data))
+summary(lm(ti_90 ~ peak_ferritin, data = pros_cytokines_data))
+summary(lm(ti_90 ~ baseline_crp, data = pros_cytokines_data))
+summary(lm(ti_90 ~ baseline_crp_cat, data = pros_cytokines_data))
+summary(lm(ti_90 ~ max_crp, data = pros_cytokines_data))
+print("zero normal peak_crp with pros data")
+# summary(lm(ti_90 ~ peak_crp, data = pros_cytokines_data))
+summary(lm(ti_90 ~ IL2_baseline, data = pros_cytokines_data))
+summary(lm(ti_90 ~ peak_il2, data = pros_cytokines_data))
+summary(lm(ti_90 ~ IL6_baseline, data = pros_cytokines_data))
+summary(lm(ti_90 ~ peak_il6, data = pros_cytokines_data))
+summary(lm(ti_90 ~ IFNg_baseline, data = pros_cytokines_data))
+summary(lm(ti_90 ~ peak_ifng, data = pros_cytokines_data))
+summary(lm(ti_90 ~ TNFa_baseline, data = pros_cytokines_data))
+summary(lm(ti_90 ~ peak_tnfa, data = pros_cytokines_data))
+```
+
+### promis_fatigue_tscore_90
+```{r}
+summary(lm(promis_fatigue_tscore_90 ~ baseline_ferritin, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ baseline_ferritin_cat, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ max_ferritin, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ peak_ferritin, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ baseline_crp, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ baseline_crp_cat, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ max_crp, data = pros_cytokines_data))
+print("zero normal peak_crp with pros data")
+# summary(lm(promis_fatigue_tscore_90 ~ peak_crp, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ IL2_baseline, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ peak_il2, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ IL6_baseline, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ peak_il6, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ IFNg_baseline, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ peak_ifng, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ TNFa_baseline, data = pros_cytokines_data))
+summary(lm(promis_fatigue_tscore_90 ~ peak_tnfa, data = pros_cytokines_data))
+```
+
+### promis_pain_tscore_90
+```{r}
+summary(lm(promis_pain_tscore_90 ~ baseline_ferritin, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ baseline_ferritin_cat, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ max_ferritin, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ peak_ferritin, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ baseline_crp, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ baseline_crp_cat, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ max_crp, data = pros_cytokines_data))
+print("zero normal peak_crp with pros data")
+# summary(lm(promis_pain_tscore_90 ~ peak_crp, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ IL2_baseline, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ peak_il2, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ IL6_baseline, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ peak_il6, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ IFNg_baseline, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ peak_ifng, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ TNFa_baseline, data = pros_cytokines_data))
+summary(lm(promis_pain_tscore_90 ~ peak_tnfa, data = pros_cytokines_data))
+```
+
+### promis_physical_tscore_90
+```{r}
+summary(lm(promis_physical_tscore_90 ~ baseline_ferritin, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ baseline_ferritin_cat, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ max_ferritin, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ peak_ferritin, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ baseline_crp, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ baseline_crp_cat, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ max_crp, data = pros_cytokines_data))
+print("zero normal peak_crp with pros data")
+# summary(lm(promis_physical_tscore_90 ~ peak_crp, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ IL2_baseline, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ peak_il2, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ IL6_baseline, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ peak_il6, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ IFNg_baseline, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ peak_ifng, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ TNFa_baseline, data = pros_cytokines_data))
+summary(lm(promis_physical_tscore_90 ~ peak_tnfa, data = pros_cytokines_data))
+```
+
+```{r}
+# a <- pros_cytokines_data %>% 
+#   # mutate_at(c("baseline_ferritin_cat",
+#   #             "peak_ferritin",
+#   #             "baseline_crp_cat",
+#   #             "peak_crp"), ~ case_when(
+#   #   str_detect(., "Normal")    ~ 0,
+#   #   str_detect(., "≥ ULN at LD")   ~ 1
+#   # )) %>% 
+#   mutate_at(c("factg_total_90_cat"#,
+#               # "peak_ferritin",
+#               # "baseline_crp_cat"
+#               ), ~ case_when(
+#     str_detect(., "Low")    ~ 0,
+#     str_detect(., "Normal")   ~ 1
+#   ))
+```
+<!-- ### Baseline ferritin -->
+```{r}
+# glm(factg_total_90_cat ~ baseline_ferritin_cat,
+#     data = a,
+#     family = "binomial") %>%
+#   tbl_regression(exponentiate = TRUE, 
+#                  intercept = TRUE) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**factg_total_90_cat 0 is Low, 1 is Normal**") %>%
+#   bold_p(t = .05) 
+```
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- glm(baseline_ferritin_cat ~ factg_total_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_ferritin 0 is normal 1 is ≥ ULN at LD (≥ 400)**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_ferritin_cat ~ ti_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_ferritin 0 is normal 1 is ≥ ULN at LD (≥ 400)**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_ferritin_cat ~ promis_fatigue_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_ferritin 0 is normal 1 is ≥ ULN at LD (≥ 400)**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_ferritin_cat ~ promis_pain_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_ferritin 0 is normal 1 is ≥ ULN at LD (≥ 400)**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_ferritin_cat ~ promis_physical_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_ferritin 0 is normal 1 is ≥ ULN at LD (≥ 400)**") %>% -->
+<!--   bold_p(t = .05)  -->
+<!-- ``` -->
+
+<!-- ### Peak ferritin -->
+<!-- ```{r} -->
+<!-- glm(peak_ferritin ~ factg_total_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_ferritin 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(peak_ferritin ~ ti_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_ferritin 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(peak_ferritin ~ promis_fatigue_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_ferritin 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(peak_ferritin ~ promis_pain_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_ferritin 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(peak_ferritin ~ promis_physical_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_ferritin 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+<!-- ``` -->
+
+<!-- ### Baseline CRP -->
+<!-- ```{r} -->
+<!-- glm(baseline_crp_cat ~ factg_total_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_crp_cat ~ ti_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_crp_cat ~ promis_fatigue_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_crp_cat ~ promis_pain_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+
+<!-- glm(baseline_crp_cat ~ promis_physical_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE,  -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**baseline_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05)  -->
+<!-- ``` -->
+
+<!-- ### Peak CRP -->
+<!-- peak CRP has only 2 zero -->
+<!-- ```{r} -->
+<!-- glm(peak_crp ~ factg_total_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE, -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05) -->
+
+<!-- glm(peak_crp ~ ti_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE, -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05) -->
+
+<!-- glm(peak_crp ~ promis_fatigue_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE, -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05) -->
+
+<!-- glm(peak_crp ~ promis_pain_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE, -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05) -->
+
+<!-- glm(peak_crp ~ promis_physical_tscore_90, -->
+<!--     data = a, -->
+<!--     family = "binomial") %>% -->
+<!--   tbl_regression(exponentiate = TRUE, -->
+<!--                  intercept = TRUE) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!--   modify_spanning_header(everything() ~ "**peak_crp 0 is normal, 1 is ≥ ULN at LD**") %>% -->
+<!--   bold_p(t = .05) -->
+<!-- ``` -->
+
+<!-- ### Baseline IL2 -->
+
+<!-- ### Peak IL2 -->
+
+<!-- ### Baseline IL6 -->
+
+<!-- ### Peak IL6 -->
+
+<!-- ### Baseline IFNg -->
+
+<!-- ### Peak IFNg -->
+
+<!-- ### Baseline TNFa -->
+
+<!-- ### Peak TNFa -->
+
+
