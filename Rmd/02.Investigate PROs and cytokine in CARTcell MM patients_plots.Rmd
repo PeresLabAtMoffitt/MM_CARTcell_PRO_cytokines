@@ -1,0 +1,617 @@
+---
+title: "Investigate PROs and cytokine levels in CARTcell MM patients"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+
+.figure {
+    margin-top: 100px;
+    margin-bottom: 100px;
+}
+
+table {
+    margin-top: 10px;
+    margin-bottom: 25px !important;
+}
+
+th, td { padding: 5px; }
+
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library}
+library(tidyverse)
+library(gtsummary)
+library(labelled)
+library(survminer)
+library(survival)
+theme_set(theme_classic(base_size = 15))
+theme_gtsummary_compact()
+```
+
+```{r load data}
+pros_cytokines_data <- 
+  read_rds(paste0(here::here(), "/pros_cytokines_data.rds"))
+
+pros_data <- pros_cytokines_data %>% 
+  filter(data_has_pros == "Yes")
+cyto_data <- pros_cytokines_data %>% 
+  filter(data_has_cytokines == "Yes")
+```
+
+# Total PROs dataset (n = `r nrow(pros_data)`)
+<!-- What are the unknowns? -->
+<!-- ```{r} -->
+<!-- pros_data %>%  -->
+<!--     select(gr2_CRS, gr2_ICANS, -->
+<!--            promis_anxiety_tscore_baseline, -->
+<!--            promis_depression_tscore_baseline, -->
+<!--            promis_social_tscore_baseline) %>% -->
+<!--     tbl_summary() %>% -->
+<!--     bold_labels() -->
+<!-- ``` -->
+
+## Categories
+### Toxicities and responses
+```{r, results = 'asis'}
+# table_var <- c("gr2_CRS", "CRS_any",
+#                "gr2_ICANS", "ICANS_any",
+#          # "day30response_v2", 
+#          "ORR_30days", "CRorbetter_30days",
+#          # "mon3response_v2", 
+#          "ORR_3mon", "CRorbetter_3mon",
+#          "best_ORR", "best_CRorbetter"
+# )
+# 
+# for (i in table_var){
+#   
+#   tbl <- pros_data %>% 
+#     select(i, 
+#            promis_anxiety_tscore_baseline,
+#            promis_depression_tscore_baseline,
+#            promis_social_tscore_baseline) %>%
+#     tbl_summary(by = i) %>%
+#     bold_labels() %>%
+#     add_p() %>% bold_p(t= 0.05) %>%
+#     modify_spanning_header(everything() ~ paste(i))
+#   print(tbl)
+#   
+# }
+```
+
+```{r, fig.width=12}
+pros_cytokines_data %>% 
+    select(promis_depression_tscore_baseline,
+           "CRS grade (<2 vs. ≥2)" = gr2_CRS, "Any CRS" = CRS_any,
+           "ICANS grade (<2 vs. ≥2)" = gr2_ICANS, "Any ICANS" = ICANS_any,
+           "Best CR or better" = best_CRorbetter) %>% 
+  pivot_longer(cols = -promis_depression_tscore_baseline) %>% 
+  filter(!is.na(value)) %>%
+  mutate(name = factor(name, levels = c("Any CRS", "CRS grade (<2 vs. ≥2)",
+                                        "Any ICANS", "ICANS grade (<2 vs. ≥2)",
+                                        "Best CR or better"
+                                        ))) %>% 
+  ggplot(aes(x = value, y = promis_depression_tscore_baseline)) +
+  geom_boxplot()+
+  ylim(39, 63)+
+  labs(x = NULL, y= "Baseline PROMIS Depression T-score")+
+  facet_grid(.~ name,
+             scales = "free_x")
+
+
+pros_cytokines_data %>% 
+    select(promis_social_tscore_baseline,
+           "CRS grade (<2 vs. ≥2)" = gr2_CRS, "Any CRS" = CRS_any,
+           "ICANS grade (<2 vs. ≥2)" = gr2_ICANS, "Any ICANS" = ICANS_any,
+           "Best CR or better" = best_CRorbetter) %>% 
+  pivot_longer(cols = -promis_social_tscore_baseline) %>% 
+  filter(!is.na(value)) %>%
+  mutate(name = factor(name, levels = c("Any CRS", "CRS grade (<2 vs. ≥2)",
+                                        "Any ICANS", "ICANS grade (<2 vs. ≥2)",
+                                        "Best CR or better"
+                                        ))) %>% 
+  ggplot(aes(x = value, y = promis_social_tscore_baseline)) +
+  geom_boxplot()+
+  labs(x = NULL, y= "Baseline PROMIS Social T-score")+
+  facet_grid(.~ name,
+             scales = "free_x")
+```
+
+
+
+### day 90 PROs
+```{r, results = 'asis'}
+# table_var <- c("factg_total_90_cat", 
+#          # "ti_90_cat", "ti_90_cat2", 
+#          "ti_90_cat3",
+#          "promis_fatigue_tscore_90_cat",
+#          "promis_fatigue_tscore_90_cat2",
+#          "promis_fatigue_tscore_90_cat3",
+#          "promis_pain_tscore_90_cat",
+#          "promis_pain_tscore_90_cat2",
+#          "promis_pain_tscore_90_cat3",
+#          "promis_physical_tscore_90_cat",
+#          "promis_physical_tscore_90_cat2",
+#          "promis_physical_tscore_90_cat3"
+# )
+# 
+# for (i in table_var){
+#   
+#   tbl <- pros_data %>% 
+#     select(i, 
+#            promis_anxiety_tscore_baseline,
+#            promis_depression_tscore_baseline,
+#            promis_social_tscore_baseline) %>%
+#     tbl_summary(by = i) %>%
+#     bold_labels() %>%
+#     add_p() %>% bold_p(t= 0.05) %>%
+#     modify_spanning_header(everything() ~ paste(i))
+#   print(tbl)
+#   
+# }
+```
+
+```{r}
+pros_cytokines_data %>% 
+    select(promis_depression_tscore_baseline,
+           factg_total_90_cat, 
+           promis_physical_tscore_90_cat,
+           promis_pain_tscore_90_cat) %>% 
+  pivot_longer(cols = -promis_depression_tscore_baseline) %>% 
+  filter(!is.na(value)) %>%
+  # filter(!is.na(baseline_crp_cat)) %>% 
+  ggplot(aes(x = value, y = promis_depression_tscore_baseline)) +
+  geom_violin()+
+  # geom_boxplot(width = .2, alpha = .6, fatten = NULL, show.legend = FALSE, outlier.shape = NA)+
+  stat_compare_means()+
+  facet_grid(.~ name,
+             scales = "free")
+
+pros_cytokines_data %>% 
+    select(promis_social_tscore_baseline,
+           factg_total_90_cat, 
+           promis_physical_tscore_90_cat,
+           promis_pain_tscore_90_cat) %>% 
+  pivot_longer(cols = -promis_social_tscore_baseline) %>% 
+  filter(!is.na(value)) %>%
+  # filter(!is.na(baseline_crp_cat)) %>% 
+  ggplot(aes(x = value, y = promis_social_tscore_baseline)) +
+  geom_violin()+
+  # geom_boxplot(width = .2, alpha = .6, fatten = NULL, show.legend = FALSE, outlier.shape = NA)+
+  stat_compare_means()+
+  facet_grid(.~ name,
+             scales = "free")
+```
+
+<!-- ## Continuous -->
+<!-- ### Anxiety -->
+<!-- ```{r} -->
+<!-- summary(lm(factg_total_90 ~ promis_anxiety_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(ti_90 ~ promis_anxiety_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_fatigue_tscore_90 ~ promis_anxiety_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_pain_tscore_90 ~ promis_anxiety_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_physical_tscore_90 ~ promis_anxiety_tscore_baseline, data = pros_data)) -->
+<!-- ``` -->
+
+<!-- ### Depression  -->
+<!-- ```{r} -->
+<!-- summary(lm(factg_total_90 ~ promis_depression_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(ti_90 ~ promis_depression_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_fatigue_tscore_90 ~ promis_depression_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_pain_tscore_90 ~ promis_depression_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_physical_tscore_90 ~ promis_depression_tscore_baseline, data = pros_data)) -->
+<!-- ``` -->
+
+<!-- ### Social  -->
+<!-- ```{r} -->
+<!-- summary(lm(factg_total_90 ~ promis_social_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(ti_90 ~ promis_social_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_fatigue_tscore_90 ~ promis_social_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_pain_tscore_90 ~ promis_social_tscore_baseline, data = pros_data)) -->
+
+<!-- summary(lm(promis_physical_tscore_90 ~ promis_social_tscore_baseline, data = pros_data)) -->
+<!-- ``` -->
+
+<!-- ## Survival -->
+<!-- ### 1.HR OS -->
+<!-- ```{r} -->
+<!-- tbl_uni <- pros_data %>%  -->
+<!--   select(os_event, mo_os_from_infusion, -->
+<!--          promis_anxiety_tscore_baseline, -->
+<!--          promis_depression_tscore_baseline, -->
+<!--          promis_social_tscore_baseline, -->
+<!--          promis_anxiety_tscore_baseline_cat, -->
+<!--          promis_anxiety_tscore_baseline_cat2, -->
+<!--          promis_anxiety_tscore_baseline_cat3, -->
+<!--          promis_depression_tscore_baseline_cat, -->
+<!--          promis_depression_tscore_baseline_cat2, -->
+<!--          promis_depression_tscore_baseline_cat3, -->
+<!--          promis_social_tscore_baseline_cat, -->
+<!--          promis_social_tscore_baseline_cat2, -->
+<!--          promis_social_tscore_baseline_cat3 -->
+<!--          ) %>% -->
+<!--   tbl_uvregression(method = survival::coxph, -->
+<!--                    y = (Surv(time = pros_data$mo_os_from_infusion, -->
+<!--                              event = pros_data$os_event)), -->
+<!--                    exponentiate = TRUE) %>% -->
+<!--   bold_labels() %>% italicize_levels() %>% -->
+<!--   bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level") -->
+<!-- tbl_uni -->
+<!-- ``` -->
+
+<!-- ### 1.HR PFS -->
+<!-- ```{r} -->
+<!-- tbl_uni <- pros_data %>%  -->
+<!--   select(pfs_event, mo_pfs_from_infusion, -->
+<!--          promis_anxiety_tscore_baseline, -->
+<!--          promis_depression_tscore_baseline, -->
+<!--          promis_social_tscore_baseline, -->
+<!--          promis_anxiety_tscore_baseline_cat, -->
+<!--          promis_anxiety_tscore_baseline_cat2, -->
+<!--          promis_anxiety_tscore_baseline_cat3, -->
+<!--          promis_depression_tscore_baseline_cat, -->
+<!--          promis_depression_tscore_baseline_cat2, -->
+<!--          promis_depression_tscore_baseline_cat3, -->
+<!--          promis_social_tscore_baseline_cat, -->
+<!--          promis_social_tscore_baseline_cat2, -->
+<!--          promis_social_tscore_baseline_cat3 -->
+<!--          ) %>% -->
+<!--   tbl_uvregression(method = survival::coxph, -->
+<!--                    y = (Surv(time = pros_data$mo_pfs_from_infusion, -->
+<!--                              event = pros_data$pfs_event)), -->
+<!--                    exponentiate = TRUE) %>% -->
+<!--   bold_labels() %>% italicize_levels() %>% -->
+<!--   bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level") -->
+<!-- tbl_uni -->
+<!-- ``` -->
+
+# Total Cytokine dataset (n = `r nrow(cyto_data)`)
+<!-- What are the unknowns? -->
+<!-- ```{r} -->
+<!-- cyto_data %>%  -->
+<!--   tbl_cross(row = baseline_ferritin_cat, col = data_has_cytokines) -->
+<!-- pros_cytokines_data %>%  -->
+<!--   tbl_cross(row = baseline_ferritin_cat, col = data_has_cytokines) -->
+<!-- pros_cytokines_data %>%  -->
+<!--     select(gr2_CRS, gr2_ICANS,  -->
+<!--            baseline_ferritin_cat, baseline_ferritin, -->
+<!--            peak_ferritin, -->
+<!--            baseline_crp_cat, baseline_crp, -->
+<!--            peak_crp, -->
+<!--            IL2_baseline, peak_il2, -->
+<!--            IL6_baseline, peak_il6, -->
+<!--            IFNg_baseline, peak_ifng, -->
+<!--            TNFa_baseline, peak_tnfa) %>% -->
+<!--     tbl_summary() %>% -->
+<!--     bold_labels() -->
+<!-- ``` -->
+
+## Categories
+### toxicities and responses
+```{r, results = 'asis'}
+# table_var <- c("gr2_CRS", "CRS_any",
+#                "gr2_ICANS", "ICANS_any",
+#          # "day30response_v2", 
+#          "ORR_30days", "CRorbetter_30days",
+#          # "mon3response_v2", 
+#          "ORR_3mon", "CRorbetter_3mon",
+#          "best_ORR", "best_CRorbetter"
+# )
+# 
+# for (i in table_var){
+#   
+#   tbl <- pros_cytokines_data %>% 
+#     select(i, 
+#            baseline_ferritin_cat, baseline_ferritin,
+#            peak_ferritin,
+#            baseline_crp_cat, baseline_crp,
+#            peak_crp,
+#            IL2_baseline, peak_il2,
+#            IL6_baseline, peak_il6,
+#            IFNg_baseline, peak_ifng,
+#            TNFa_baseline, peak_tnfa) %>%
+#     tbl_summary(by = i) %>%
+#     bold_labels() %>%
+#     add_p() %>% bold_p(t= 0.05) %>%
+#     modify_spanning_header(everything() ~ paste(i))
+#   print(tbl)
+#   
+# }
+```
+
+### day 90 PROs
+```{r, results = 'asis'}
+# table_var <- c("factg_total_90_cat", 
+#          # "ti_90_cat", "ti_90_cat2", 
+#          "ti_90_cat3",
+#          "promis_fatigue_tscore_90_cat",
+#          "promis_fatigue_tscore_90_cat2",
+#          "promis_fatigue_tscore_90_cat3",
+#          "promis_pain_tscore_90_cat",
+#          "promis_pain_tscore_90_cat2",
+#          "promis_pain_tscore_90_cat3",
+#          "promis_physical_tscore_90_cat",
+#          "promis_physical_tscore_90_cat2",
+#          "promis_physical_tscore_90_cat3"
+# )
+# 
+# for (i in table_var){
+#   
+#   tbl <- pros_cytokines_data %>% 
+#     select(i, 
+#            baseline_ferritin_cat, baseline_ferritin,
+#            peak_ferritin,
+#            baseline_crp_cat, baseline_crp,
+#            peak_crp,
+#            IL2_baseline, peak_il2,
+#            IL6_baseline, peak_il6,
+#            IFNg_baseline, peak_ifng,
+#            TNFa_baseline, peak_tnfa) %>%
+#     tbl_summary(by = i) %>%
+#     bold_labels() %>%
+#     add_p() %>% bold_p(t= 0.05) %>%
+#     modify_spanning_header(everything() ~ paste(i))
+#   print(tbl)
+#   
+# }
+```
+
+```{r, fig.width=12}
+# devtools::install_github("psyteachr/introdataviz")
+# library(introdataviz)
+
+# pros_cytokines_data %>% 
+#     select(baseline_crp_cat,
+#            IL2_baseline, peak_il2,
+#            IL6_baseline, peak_il6,
+#            IFNg_baseline, peak_ifng,
+#            TNFa_baseline, peak_tnfa) %>% 
+#   pivot_longer(cols = -baseline_crp_cat) %>% 
+#   filter(!is.na(value)) %>% 
+#   filter(!is.na(baseline_crp_cat)) %>% 
+#   ggplot(aes(x = name, y = value, fill = baseline_crp_cat)) +
+#   geom_boxplot()+
+#   # geom_split_violin(alpha = .4, trim = FALSE)+
+#   # geom_boxplot(width = .2, alpha = .6, fatten = NULL, show.legend = FALSE, outlier.shape = NA)+
+#   # stat_compare_means()+
+#   facet_wrap(.~ name,
+#              scales = "free")+
+#   theme(legend.position = "bottom",
+#         axis.title = element_blank(),
+#         axis.text.x = element_blank())
+
+pros_cytokines_data %>% 
+    select(factg_total_90_cat,
+           "Baseline IL2" = IL2_baseline, "Peak IL2" = peak_il2,
+           "Baseline IL6" = IL6_baseline, "Peak IL6" = peak_il6,
+           "Baseline IFNgamma" = IFNg_baseline, "Peak IFNgamma" = peak_ifng,
+           "Baseline TNFalpha" = TNFa_baseline, "Peak TNFalpha" = peak_tnfa) %>% 
+  pivot_longer(cols = -factg_total_90_cat) %>% 
+  filter(!is.na(value)) %>% 
+  filter(!is.na(factg_total_90_cat)) %>%
+  mutate(name = factor(name, levels = c("Baseline IL2", "Baseline IL6",
+                                        "Baseline IFNgamma", "Baseline TNFalpha",
+                                        "Peak IL2", "Peak IL6", 
+                                        "Peak IFNgamma", "Peak TNFalpha"
+                                        ))) %>% 
+  ggplot(aes(x = name, y = value, fill = factg_total_90_cat)) +
+  geom_boxplot()+
+  # geom_split_violin(alpha = .4, trim = FALSE)+
+  # geom_boxplot(width = .2, alpha = .6, fatten = NULL, show.legend = FALSE, outlier.shape = NA)+
+  # stat_compare_means()+
+  scale_y_log10(breaks = c(0.1, 10, 1000), 
+                labels = c(0.1, 10, 1000))+
+  scale_fill_manual(values = c("red", "blue"), name = "FACTG - Total score at day 90")+
+  facet_wrap(.~ name,
+             scales = "free_x", #switch = "x",
+             nrow = 1)+
+  theme(legend.position = "bottom",
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+# tiff("Figure 4 Pain vs Toxicities.tiff", width = 1400, height = 400)
+pros_cytokines_data %>% 
+    select(promis_pain_tscore_90_cat3,
+           "Baseline IL2" = IL2_baseline, "Peak IL2" = peak_il2,
+           "Baseline IL6" = IL6_baseline, "Peak IL6" = peak_il6,
+           "Baseline IFNgamma" = IFNg_baseline, "Peak IFNgamma" = peak_ifng,
+           "Baseline TNFalpha" = TNFa_baseline, "Peak TNFalpha" = peak_tnfa) %>% 
+  pivot_longer(cols = -promis_pain_tscore_90_cat3) %>% 
+  filter(!is.na(value)) %>% 
+  filter(!is.na(promis_pain_tscore_90_cat3)) %>% 
+  mutate(name = factor(name, levels = c("Baseline IL2", "Baseline IL6",
+                                        "Baseline IFNgamma", "Baseline TNFalpha",
+                                        "Peak IL2", "Peak IL6", 
+                                        "Peak IFNgamma", "Peak TNFalpha"
+                                        ))) %>% 
+  ggplot(aes(x = name, y = value, fill = promis_pain_tscore_90_cat3)) +
+  geom_boxplot()+
+  # geom_split_violin(alpha = .4, trim = FALSE)+
+  # geom_boxplot(width = .2, alpha = .6, fatten = NULL, show.legend = FALSE, outlier.shape = NA)+
+  # stat_compare_means()+
+  scale_y_log10(breaks = c(0.1, 10, 1000), 
+                labels = c(0.1, 10, 1000))+
+  scale_fill_brewer(palette = "Dark2", name = "PROMIS Pain T-score at day 90")+
+  facet_wrap(.~ name,
+             scales = "free_x", #switch = "x",
+             nrow = 1)+
+  theme(legend.position = "bottom",
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+# dev.off()
+
+pros_cytokines_data %>% 
+    select(promis_physical_tscore_90_cat3,
+           "Baseline IL2" = IL2_baseline, "Peak IL2" = peak_il2,
+           "Baseline IL6" = IL6_baseline, "Peak IL6" = peak_il6,
+           "Baseline IFNgamma" = IFNg_baseline, "Peak IFNgamma" = peak_ifng,
+           "Baseline TNFalpha" = TNFa_baseline, "Peak TNFalpha" = peak_tnfa) %>% 
+  pivot_longer(cols = -promis_physical_tscore_90_cat3) %>% 
+  filter(!is.na(value)) %>% 
+  filter(!is.na(promis_physical_tscore_90_cat3)) %>% 
+  mutate(name = factor(name, levels = c("Baseline IL2", "Baseline IL6",
+                                        "Baseline IFNgamma", "Baseline TNFalpha",
+                                        "Peak IL2", "Peak IL6", 
+                                        "Peak IFNgamma", "Peak TNFalpha"
+                                        ))) %>% 
+  ggplot(aes(x = name, y = value, fill = promis_physical_tscore_90_cat3)) +
+  geom_boxplot()+
+  # geom_split_violin(alpha = .4, trim = FALSE)+
+  # geom_boxplot(width = .2, alpha = .6, show.legend = FALSE, outlier.shape = NA)+
+  # stat_compare_means()+
+  scale_y_log10(breaks = c(0.1, 10, 1000), 
+                labels = c(0.1, 10, 1000))+
+  scale_fill_brewer(palette = "Accent", name = "PROMIS Physical T-score at day 90")+
+  facet_wrap(.~ name,
+             scales = "free_x", #switch = "x",
+             nrow = 1)+
+  theme(legend.position = "bottom",
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+<!-- ## Continuous -->
+
+<!-- ### factg_total_90 -->
+<!-- ```{r} -->
+<!-- summary(lm(factg_total_90 ~ baseline_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ baseline_ferritin_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ max_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ peak_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ baseline_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ baseline_crp_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ max_crp, data = pros_cytokines_data)) -->
+<!-- print("zero normal peak_crp with pros data") -->
+<!-- # summary(lm(factg_total_90 ~ peak_crp, data = pros_cytokines_data)) -->
+<!-- # pros_cytokines_data %>%  -->
+<!-- #   select(factg_total_90, baseline_ferritin) %>%  -->
+<!-- #   tbl_uvregression(method = lm, -->
+<!-- #                    y = factg_total_90) -->
+<!-- summary(lm(factg_total_90 ~ IL2_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ peak_il2, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ IL6_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ peak_il6, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ IFNg_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ peak_ifng, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ TNFa_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(factg_total_90 ~ peak_tnfa, data = pros_cytokines_data)) -->
+<!-- ``` -->
+
+<!-- ### ti_90 -->
+<!-- ```{r} -->
+<!-- summary(lm(ti_90 ~ baseline_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ baseline_ferritin_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ max_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ peak_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ baseline_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ baseline_crp_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ max_crp, data = pros_cytokines_data)) -->
+<!-- print("zero normal peak_crp with pros data") -->
+<!-- # summary(lm(ti_90 ~ peak_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ IL2_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ peak_il2, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ IL6_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ peak_il6, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ IFNg_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ peak_ifng, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ TNFa_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(ti_90 ~ peak_tnfa, data = pros_cytokines_data)) -->
+<!-- ``` -->
+
+<!-- ### promis_fatigue_tscore_90 -->
+<!-- ```{r} -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ baseline_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ baseline_ferritin_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ max_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ peak_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ baseline_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ baseline_crp_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ max_crp, data = pros_cytokines_data)) -->
+<!-- print("zero normal peak_crp with pros data") -->
+<!-- # summary(lm(promis_fatigue_tscore_90 ~ peak_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ IL2_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ peak_il2, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ IL6_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ peak_il6, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ IFNg_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ peak_ifng, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ TNFa_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_fatigue_tscore_90 ~ peak_tnfa, data = pros_cytokines_data)) -->
+<!-- ``` -->
+
+<!-- ### promis_pain_tscore_90 -->
+<!-- ```{r} -->
+<!-- summary(lm(promis_pain_tscore_90 ~ baseline_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ baseline_ferritin_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ max_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ peak_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ baseline_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ baseline_crp_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ max_crp, data = pros_cytokines_data)) -->
+<!-- print("zero normal peak_crp with pros data") -->
+<!-- # summary(lm(promis_pain_tscore_90 ~ peak_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ IL2_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ peak_il2, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ IL6_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ peak_il6, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ IFNg_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ peak_ifng, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ TNFa_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_pain_tscore_90 ~ peak_tnfa, data = pros_cytokines_data)) -->
+<!-- ``` -->
+
+<!-- ### promis_physical_tscore_90 -->
+<!-- ```{r} -->
+<!-- summary(lm(promis_physical_tscore_90 ~ baseline_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ baseline_ferritin_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ max_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ peak_ferritin, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ baseline_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ baseline_crp_cat, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ max_crp, data = pros_cytokines_data)) -->
+<!-- print("zero normal peak_crp with pros data") -->
+<!-- # summary(lm(promis_physical_tscore_90 ~ peak_crp, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ IL2_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ peak_il2, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ IL6_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ peak_il6, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ IFNg_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ peak_ifng, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ TNFa_baseline, data = pros_cytokines_data)) -->
+<!-- summary(lm(promis_physical_tscore_90 ~ peak_tnfa, data = pros_cytokines_data)) -->
+<!-- ``` -->
+
